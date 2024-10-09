@@ -109,22 +109,59 @@ MonoBehaviour是Unity中所有脚本的基类，如果你使用js的话，脚本
 - OnGUI 方法:  渲染和处理GUI事件时调用 这里不是 没帧都调用哦
 - OnDisable：当对象变为不可用或非激活状态时此函数被调用。
 - OnDestroy：当MonoBehaviour将被销毁时，这个函数被调用。
+- 【协程看图上，似乎是在Update之后，LateUpdate之前被调用】
 
 
-### Unity GC
+## Unity GC
 【Unity3d游戏开发】浅谈Unity中的GC以及优化:https://blog.csdn.net/worisaa/article/details/64121436
 
  Unity GC垃圾回收 : https://blog.csdn.net/wangjiangrong/article/details/89011349
 
-### 10000个monobehavior，每个各自执行update，和放到一个update里执行，哪个效率更高？为什么？
-Unity3d 10000 Update() calls 性能优化 https://blog.unity.com/engine-platform/10000-update-calls
+***
+
+## 10000个monobehavior，每个各自执行update，和放到一个update里执行，哪个效率更高？为什么？
+ https://blog.unity.com/engine-platform/10000-update-calls
+
+【结论】
+放到一个update里效率更高。
+这里要引出并回答下面的问题：
+- 各个Monobehavior的Update（如果有）是如何被调用的？
+  - 在往GameObject添加Monobehavior Component时，unity会检查它是否有Update等诸如此类的方法；若有，Unity会将其添加到自己的一个list中。
+  - 对update：每一帧中，Unity就要遍历这个list。这一过程除了要调用各个Update外，还要做下面的检查
+    1. 先遍历所有Behavior【占用约15%】
+    2. CallMethodIfAvailable: 检查MB对应的GO是否还活着（没有被Destory）【占用约22%】
+    3. ScriptingInvocationNoArgs: 准备调用方法；ScriptingInvocationNoArgs实例表示一个native side stuff对managed side method的调用【占用约21%】
+    4. scripting_method_invoke: 检查传入的参数是否正确【9%】
+    5. 调用IL2CPP虚拟机的Runtime::Invoke: 首先检查是否有Update方法【10.2%】
+    6. 对被调用的方法的签名（参数列表），生成一个RuntimeInvoker function，并调用它
+    7. Update方法被调用【例子中，占用0.4%】
+
+所以：放到一个Update里运行效率更高，因为能省去非常多的检查开销。这也为怎么做优化提供思路，但也意味着我们要自己做必要的检查，这也是费功夫的事。
 
 ### 为什么instantiate会耗性能？
 第一次执行GameObject.Instantiate的时候有明显卡顿，该怎么解决？
-https://answer.uwa4d.com/question/58f376cd691df3f25d576cf1/undefined
+
+原文链接：https://blog.csdn.net/qq_35957011/article/details/121148527
+
+Instantiate的卡顿与三部分开销相关：
+1. 相关资源加载
+2. 脚本组件的序列化
+3. 构造函数的执行
+
+绝大部分原因均是相关资源加载导致。所以，我们的建议如下：
+
+1. 通过 Profiler 查看 Instantiate 具体的CPU分配情况；
+2. 如果是资源加载导致的性能瓶颈，则一方面通过<b><i>简化资源</i></b>来缓解CPU耗时压力，另一方面通过 AssetBundle <b><i>依赖关系打包</i></b>将资源预先加载，即<u>将此处 Instantiate 的总体耗时拆分，平摊到之前帧进行执行</u>（比如切换场景处等），从而让 Instantiate 实例化操作的局部耗时更加平滑；
+3. 如果是脚本组件序列化导致的性能瓶颈，则可尝试减少脚本中的序列化信息；
+4. 如果是构造函数的执行导致的性能瓶颈，一般只能在策略上进行规避，比如降低 Instantiate 的调用频率等。
+
+回答问题：
+如果只是第一次加载会很卡，后面加载还算快，那说明AB中有可共用的部分。那么就可以将其拆分开来加载。
 
 ### AssestBundle基础:
-https://blog.csdn.net/a834595603/article/details/91346559
+https://blog.csdn.net/a834595603/article/details/91346559【这他妈要钱】
+
+https://blog.csdn.net/m0_48554728/article/details/123562033【我自己找的】
 
 ### AB包的压缩格式有哪些？你知道哪些压缩算法？
 Unity3D:资源包的压缩(Asset Bundle Compression)
@@ -142,3 +179,5 @@ https://www.cnblogs.com/skandya/p/4905145.html
 ### DrawCall、Batch、SetPassCall的区别
 https://zhuanlan.zhihu.com/p/366779113
 
+### 还有一些面试题
+https://blog.csdn.net/qq_35957011/article/details/121148527
