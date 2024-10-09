@@ -176,25 +176,77 @@ Instantiate的卡顿与三部分开销相关：
 如果只是第一次加载会很卡，后面加载还算快，那说明AB中有可共用的部分。那么就可以将其拆分开来加载。
 
 ### AssestBundle基础:
-https://blog.csdn.net/a834595603/article/details/91346559【这他妈要钱】
+https://blog.csdn.net/m0_48554728/article/details/123562033 |【我自己找的，Unity文档的机翻】
 
-https://blog.csdn.net/m0_48554728/article/details/123562033【我自己找的】
+https://docs.unity3d.com/550/Documentation/Manual/AssetBundleCompression.html | 【Unity文档】
 
 ### AB包的压缩格式有哪些？你知道哪些压缩算法？
 Unity3D:资源包的压缩(Asset Bundle Compression)
+
 https://blog.csdn.net/zgl159040290/article/details/52806507
 
+* 无压缩：加载最快，大小最大
+* LZ4: 块压缩；压缩率不如LZMA，但是解压速度非常快，以至于可以在运行时再解压（这也是为什么MD都用LZ4）
+* LZMA：流压缩，标准压缩格式；文件大小最小，解压和加载时间最长
+
+`WWW.LoadFromCacheOrDownload`: As data arrives from the (network) socket, Unity will decompress it (from `LZMA`) and recompress it in `LZ4` format. This recompression occurs during the download streaming, which means the cache compression begins as soon as enough of the data is downloaded, and continues incrementally until the download is complete. After that, data is read from the cached bundle by decompressing chunks on-the-fly when needed.
 
 ### Uielement
 一个新的用于UnityEditor的UI框架,实现类似于Web前端
 Unity 2019.1的UIElements功能介绍
 https://www.linecg.com/news_8740.html
 
-### 动态合批静态合拼
-https://www.cnblogs.com/skandya/p/4905145.html
+## 动态合批静态合拼
+
+https://gwb.tencent.com/community/detail/114323 | 【非常好的文章】
+
+### 静态批处理（static batching）：
+
+`Static` 的含义：如果我们的游戏场景中有一些共享同一材质的模型存在，并且**这些模型一直都不会移动、旋转和缩放**。我们可以将这些模型设置为Static。
+
+对于每种共享材质（sharedMaterial），Unity在打包时，会将各个模型的Vertex buffer与Index buffer，合并为1个大、新的Vertex buffer与Index buffer下，并记录每个模型原本的Index Buffer在新的大Index buffer中的位置`[start, end]`
+
+其作用有：
+1. 优化掉了各个单独模型的局部坐标到世界坐标的转换的计算；
+2. 虽然不减少DrawCall次数，但因为（后面这段建议背诵）子模型有材质共享，多次DrawCall调用中没有了**渲染状态**的切换，渲染API会缓存绘制命令，进而实现**渲染优化**。
+3. [debuff] 应用打包之后文件体积增大，运行时所占用的内存也增大。
+    - 不开启Static batching，GameObject共享的模型会在应用程序包内或者内存中只存在一份，绘制的时候提交模型顶点信息，然后设置每一个GameObjec的材质信息，分别调用渲染API绘制。
+    - 开启Static batching，在Unity执行Build的时候，场景中所有引用相同模型的GameObject都必须将模型顶点信息复制，并经过计算变化到最终在世界空间中，存储在最终生成的Vertex buffer中。这就导致了打包的体积及运行时内存的占用增大。
+
+### 动态批处理（dynamic batching）:
+`Dynamic`的含义：如果我们开启了Dynamic batching，Unity会自动地将所有**共享同一材质**的动态GameObject在一个Draw call内绘制。
+
+在进行场景绘制之前将所有的共享同一材质的模型的顶点信息变换到世界空间中，然后通过_**一次**_Draw call绘制多个模型，达到合批的目的。
+
+#### 一些注意点：
+* 模型顶点变换的操作是由CPU完成的，所以这会带来一些CPU的性能消耗（每一帧都有，因为每一帧都要计算）。
+* Dynamic batching只能处理一些小模型：
+  - 计算的模型顶点数量不宜太多，否则CPU串行计算耗费的时间太长会造成场景渲染卡顿
+  - Unity限制能进行Dynamic batching的模型最高能有900个**顶点属性**（区别于900个顶点）；顶点属性包含position, normal, UV这些
+
+#### 不是什么时候都能做Dynamic batching的：
+1. Unity的文档中说，GameObject之间如果有镜像变换不能进行合批。例如，"GameObject A with +1 scale and GameObject B with –1 scale cannot be batched together"。
+2. 使用Multi-pass Shader的物体会禁用Dynamic batching，因为Multi-pass Shader通常会导致一个物体要连续绘制多次，并切换渲染状态（这是核心问题，静态batching就是希望能减少渲染状态切换次数。
+3. 后面还有三点，没看明白（缺了些相关知识）；
+
+### GPU Instancing
+
+一句话概括：特别适用于场景中重复出现的、完全一样的Mesh（有相同拓扑、相同material）；
+
+渲染时，这些重复出现的Mesh要有相同的Mesh拓扑结构以及相同的材质，但可以有不同的参数（比如，颜色与scale）
+
+文档：https://docs.unity3d.com/2019.4/Documentation/Manual/GPUInstancing.html
+
+***
 
 ### DrawCall、Batch、SetPassCall的区别
 https://zhuanlan.zhihu.com/p/366779113
 
 ### 还有一些面试题
 https://blog.csdn.net/qq_35957011/article/details/121148527
+
+### 图像（材质）压缩
+
+`Dithering`是什么？是一种图像的压缩方式（技巧）：https://shihn.ca/posts/2020/dithering/
+
+![](img/img_compression.png)
