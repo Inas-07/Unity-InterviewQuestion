@@ -33,6 +33,8 @@
 - 四元数旋转
     - 优点：可以避免万向锁；只需要一个4维的四元数就可以执行绕任意过原点的向量的旋转，方便快捷，在某些实现下比旋转矩阵效率更高；而且四元数旋转可以提供平滑插值。
     - 缺点：比欧拉旋转稍微复杂了一点，因为多了一个维度，理解更困难，不直观。
+- 四元数插值怎么做？
+    - 详细的四元数介绍：https://yangbenbo.github.io/2020/11/25/%E5%9B%9B%E5%85%83%E6%95%B0/
 
 ### UGUI底层
 想详细了解unity UGUI的渲染流程，但是感觉没有专业文献，如何解决这种难题？ - 柴柴爱Coding的回答 - 知乎  
@@ -100,6 +102,23 @@ http://www.xuanyusong.com/archives/4241
 - 当Is Trigger=false时，碰撞器根据物理引擎引发碰撞，产生碰撞的效果，可以调用OnCollisionEnter/Stay/Exit函数；
 - 当Is Trigger=true时，碰撞器被物理引擎所忽略，没有碰撞效果，可以调用OnTriggerEnter/Stay/Exit函数。
 - 如果既要检测到物体的接触又不想让碰撞检测影响物体移动或要检测一个物件是否经过空间中的某个区域这时就可以用到触发器
+
+文档：https://docs.unity3d.com/ScriptReference/Collider.OnTriggerEnter.html
+
+Unity中Collider与Trigger都集成实现在Collider组件中；对于Trigger，有collider.isTrigger == true.
+
+注：
+* 两个collider碰撞，要触发的话，至少1个collider为刚体且处于动态模式。
+* 一个collider进入另一个trigger范围内，即可触发。
+* 两个collider碰撞，会产生实际的物理反应（如反弹）；但collider进入trigger，只会检查物体的进出，不产生实际物理反应
+
+`OnTriggerEnter` happens on the `FixedUpdate` function when two GameObjects collide, The Colliders involved are not always at the point of initial contact.
+
+* Both `GameObjects` must contain a `Collider` component. 
+* One must have `Collider.isTrigger` enabled, and contain a `Rigidbody`(并且RigidBody.isKinematic == true). 
+* If both GameObjects have Collider.isTrigger enabled, no collision happens. (两个都是trigger) 
+  * The same applies when both GameObjects do not have a Rigidbody component. 
+
 
 ### UGUI canvas的三种模式
 【Unity3d游戏开发】浅谈UGUI中的Canvas以及三种画布渲染模式: https://www.cnblogs.com/msxh/p/6337338.html
